@@ -1,0 +1,511 @@
+//@version=5
+indicator("Dynamic Pivot Levels with Continuous High-Low Lines and Fibonacci -- Hippopotamus --", shorttitle="Multi Pivot - Hippopotamus", overlay=true, max_labels_count=500)
+
+// ===================
+// User Control Settings
+// ===================
+enablePivotSettings = input.bool(true, title="Enable Pivot Settings")
+enableStyleSettings = input.bool(true, title="Enable Style Settings")
+enableLineDisplaySettings = input.bool(true, title="Enable Line Display Settings")
+
+// ===================
+// History Control Settings
+// ===================
+historyOptions = input.string(title="Pivot History Display", defval="90 Days", options=["90 Days", "180 Days", "Unlimited"], tooltip="Select the amount of pivot history to display")
+
+// ===================
+// Control the history display based on the user selection
+// ===================
+var int historyDays = 0
+if historyOptions == "90 Days"
+    historyDays := 90
+else if historyOptions == "180 Days"
+    historyDays := 180
+else
+    historyDays := 1000000  // Large number to represent unlimited
+
+// Get the timestamp for the current time minus the number of days selected
+var int startTimestamp = timenow - historyDays * 86400  // 86400 seconds in a day
+
+// ===================
+// Pivot High/Low Settings (Conditional Display)
+// ===================
+var int leftLenH = 10
+var int rightLenH = 10
+var int leftLenL = 10
+var int rightLenL = 10
+
+if (enablePivotSettings)
+    group_pivots = "Pivot Settings"
+    leftLenH := input.int(title="Pivot High Length", defval=10, minval=1, group=group_pivots)
+    rightLenH := input.int(title="Pivot Right Length High", defval=10, minval=1, group=group_pivots)
+    leftLenL := input.int(title="Pivot Low Length", defval=10, minval=1, group=group_pivots)
+    rightLenL := input.int(title="Pivot Right Length Low", defval=10, minval=1, group=group_pivots)
+
+// ===================
+// Style Settings (Conditional Display)
+// ===================
+var color highLabelColor = color.rgb(14,200,88,80)
+var color lowLabelColor = color.rgb(126,22,80,70)
+var color highTextColor = color.white
+var color lowTextColor = color.white
+var textSize = size.normal
+
+if (enableStyleSettings)
+    group_style = "Style Settings"
+    highLabelColor := input.color(title="High Label Color", defval=color.rgb(14,200,88,80), group=group_style)
+    lowLabelColor := input.color(title="Low Label Color", defval=color.rgb(126,22,80,70), group=group_style)
+    highTextColor := input.color(title="High Text Color", defval=color.white, group=group_style)
+    lowTextColor := input.color(title="Low Text Color", defval=color.white, group=group_style)
+    textSizeOption = input.string(title="Label Text Size", defval="Normal", options=["Small", "Normal", "Large"], group=group_style)
+    textSize := textSizeOption == "Small" ? size.small : textSizeOption == "Large" ? size.large : size.normal
+
+// ===================
+// Line Display Settings (Conditional Display)
+// ===================
+var bool showContinuousLines = false
+var bool showLastHighLowLines = false
+
+if (enableLineDisplaySettings)
+    group_lines = "Line Display Settings"
+    showContinuousLines := input.bool(false, title="Show Continuous Lines", group=group_lines)
+    showLastHighLowLines := input.bool(false, title="Show Last High/Low Lines", group=group_lines)
+
+// ===================
+// Logic for pivot points and restricting display based on history
+// ===================
+
+pivotHigh = ta.pivothigh(high, leftLenH, rightLenH)
+pivotLow = ta.pivotlow(low, leftLenL, rightLenL)
+
+if time >= startTimestamp and enablePivotSettings
+    // Plot pivot highs
+    if not na(pivotHigh)
+        label.new(bar_index[pivotHigh], high[pivotHigh], text="Pivot High", color=highLabelColor, textcolor=highTextColor, style=label.style_label_down, size=textSize)
+        if showLastHighLowLines
+            line.new(bar_index[pivotHigh], high[pivotHigh], bar_index, high[pivotHigh], color=highLabelColor, width=2)
+    
+    // Plot pivot lows
+    if not na(pivotLow)
+        label.new(bar_index[pivotLow], low[pivotLow], text="Pivot Low", color=lowLabelColor, textcolor=lowTextColor, style=label.style_label_up, size=textSize)
+        if showLastHighLowLines
+            line.new(bar_index[pivotLow], low[pivotLow], bar_index, low[pivotLow], color=lowLabelColor, width=2)
+
+    // Show continuous lines if enabled
+    if showContinuousLines
+        var line pivotLineHigh = na
+        var line pivotLineLow = na
+
+        if not na(pivotHigh)
+            line.set_xy2(pivotLineHigh, bar_index, high[pivotHigh])
+        if not na(pivotLow)
+            line.set_xy2(pivotLineLow, bar_index, low[pivotLow])
+
+
+
+
+// ===================
+// Fibonacci Settings
+// ===================
+group_fib = "Fibonacci Settings"
+showFib = input.bool(false, title="Show Fibonacci Levels", group=group_fib)
+
+
+
+
+// Calculate pivot highs and lows
+ph = ta.pivothigh(leftLenH, rightLenH)
+pl = ta.pivotlow(leftLenL, rightLenL)
+
+// Create series to hold the highs and lows
+var float highLineSeries = na
+var float lowLineSeries = na
+
+// Variables to store the previous high and low for comparison
+var float prevHigh = na
+var float prevLow = na
+
+// Update the series only when new pivot points are found
+if not na(ph)
+    highLineSeries := ph  // Set the high series value to the current pivot high
+    prevHigh := ph  // Update the previous high value
+else
+    highLineSeries := highLineSeries[1.8]  // Carry the previous value forward to maintain continuity
+
+if not na(pl)
+    lowLineSeries := pl  // Set the low series value to the current pivot low
+    prevLow := pl  // Update the previous low value
+else
+    lowLineSeries := lowLineSeries[1.8]  // Carry the previous value forward to maintain continuity
+
+// Use a conditional plot: plot only if showContinuousLines is true, otherwise return na
+plot(showContinuousLines ? highLineSeries : na, color=color.red, linewidth=2, title="Highs Line")
+plot(showContinuousLines ? lowLineSeries : na, color=color.green, linewidth=2, title="Lows Line")
+
+// Plot the last high/low lines if enabled
+if showLastHighLowLines
+    var line lastHighLine = na
+    var line lastLowLine = na
+
+    // Draw new lines for the last high and low
+    if not na(prevHigh)
+        lastHighLine := line.new(x1=bar_index[rightLenH], y1=prevHigh, x2=bar_index, y2=highLineSeries, color=color.red, width=2)
+
+    if not na(prevLow)
+        lastLowLine := line.new(x1=bar_index[rightLenL], y1=prevLow, x2=bar_index, y2=lowLineSeries, color=color.green, width=2)
+
+// Function to calculate percentage rise
+calcPercentageRise(lowPrice, highPrice) =>
+    if (not na(lowPrice) and not na(highPrice) and lowPrice != highPrice)
+        (highPrice - lowPrice) / lowPrice * 100  // Calculate rise percentage
+    else
+        na
+
+// Function to calculate percentage drop
+calcPercentageDrop(highPrice, lowPrice) =>
+    if (not na(lowPrice) and not na(highPrice) and highPrice != lowPrice)
+        (highPrice - lowPrice) / highPrice * 100  // Calculate drop percentage
+    else
+        na
+
+// Calculate the percentage rise from low to high and the percentage drop from high to low
+percentageRise = (not na(ph) and not na(lowLineSeries)) ? calcPercentageRise(lowLineSeries, ph) : na
+percentageDrop = (not na(pl) and not na(highLineSeries)) ? calcPercentageDrop(highLineSeries, pl) : na
+
+// Draw labels for high pivots with percentage rise (above the bar, right side)
+if not na(ph) and not na(percentageRise)
+    labelTextHigh = str.format("High: {0}\nRise: {1}%", ph, str.tostring(percentageRise, "#.00"))
+    label.new(bar_index[rightLenH], ph, text=labelTextHigh, style=label.style_label_right, color=highLabelColor, textcolor=highTextColor, size=textSize, yloc=yloc.abovebar)
+
+// Draw labels for low pivots with percentage drop (below the bar, right side)
+if not na(pl) and not na(percentageDrop)
+    labelTextLow = str.format("Low: {0}\nDrop: {1}%", pl, str.tostring(percentageDrop, "#.00"))
+    label.new(bar_index[rightLenL], pl, text=labelTextLow, style=label.style_label_right, color=lowLabelColor, textcolor=lowTextColor, size=textSize, yloc=yloc.belowbar)
+
+
+
+
+
+// fib tool 
+// Updated Fibonacci Levels and Colors to match the image
+
+depthTooltip = "The minimum number of bars that will be taken into account when calculating the indicator."
+depth = input.int(title="Depth", defval=20, minval=5, inline = "Pivots", tooltip=depthTooltip)
+reverse = input(false, "Reverse", display = display.data_window)
+var extendLeft = input(false, "Extend Left    |    Extend Right", inline = "Extend Lines", display = display.data_window)
+var extendRight = input(true, "", inline = "Extend Lines", display = display.data_window)
+var extending = extend.none
+if extendLeft and extendRight
+    extending := extend.both
+if extendLeft and not extendRight
+    extending := extend.left
+if not extendLeft and extendRight
+    extending := extend.right
+prices = input(false, "Show Prices", display = display.data_window)
+levels = input(true, "Show Levels", inline = "Levels", display = display.data_window)
+levelsFormat = input.string("Percent", "", options = ["Values", "Percent"], inline = "Levels", display = display.data_window)
+labelsPosition = input.string("Right", "Labels Position", options = ["Left", "Right"], display = display.data_window)
+backgroundTransparency = input.int(95, "Background Transparency", minval = 0, maxval = 100, display = display.data_window)
+
+upperThreshold = 0.236
+lowerThreshold = 1.0
+
+import TradingView/ta/7
+import TradingView/ZigZag/7 as zigzag
+
+pivots(src, length, isHigh) =>
+    if bar_index >= length
+        price = nz(src[length])
+        found = true
+        for i = 0 to length * 2
+            if (isHigh and src[i] > price) or (not isHigh and src[i] < price)
+                found := false
+                break
+        if found
+            chart.point.from_time(time[length], price)
+
+update()=>
+    var line lineLastHL = na
+    var line lineLastLH = na
+    var line lineLast = na
+
+    var chart.point[] pivotsH = array.new<chart.point>()
+    var chart.point lastH = na
+    var chart.point[] pivotsL = array.new<chart.point>()
+    var chart.point lastL = na
+
+    var isHighLast = false
+    var float startPrice = na
+    var float endPrice = na
+
+    H = pivots(high, depth / 2, true)
+    L = pivots(low, depth / 2, false)
+
+    countPivotsH = array.size(pivotsH)
+    countPivotsL = array.size(pivotsL)
+
+    if countPivotsH > 0 and countPivotsL > 0
+        lastH := array.get(pivotsH, countPivotsH-1)
+        lastL := array.get(pivotsL, countPivotsL-1)
+        isHighLast := lastH.time > lastL.time
+        if isHighLast
+            if not na(H)
+                if H.price > lastH.price
+                    array.set(pivotsH, countPivotsH-1, H)
+                H := na
+        else
+            if not na(L)
+                if L.price < lastL.price
+                    array.set(pivotsL, countPivotsL-1, L)
+                L := na
+
+    if not na(H)
+        array.push(pivotsH, H)
+
+    if not na(L)
+        array.push(pivotsL, L)
+
+    if barstate.islast and array.size(pivotsH) > 0 and array.size(pivotsL) > 0
+        pivotsHCopy = array.copy(pivotsH)
+        pivotsLCopy = array.copy(pivotsL)
+        while array.size(pivotsHCopy) > 0 and array.size(pivotsLCopy) > 0
+            lastH := array.pop(pivotsHCopy)
+            lastL := array.pop(pivotsLCopy)
+
+            isHighLast := lastH.time > lastL.time
+            pivots = isHighLast ? pivotsHCopy : pivotsLCopy
+
+            for i = array.size(pivots)-1 to 0
+                if i < 0
+                    break
+                p = array.get(pivots, i)
+                if p.time < lastL.time
+                    break
+                betterPrice = isHighLast ? p.price > lastH.price : p.price < lastL.price
+                if p.price > lastH.price
+                    lastH := array.pop(pivots)
+                else
+                    array.remove(pivots, i)
+
+            if array.size(pivotsHCopy) == 0 or array.size(pivotsLCopy) == 0
+                break
+
+            isHighLast := lastH.time > lastL.time
+            pivots := isHighLast ? pivotsHCopy : pivotsLCopy
+
+            prevPivot = array.get(pivots, array.size(pivots)-1)
+            startPrice := prevPivot.price
+
+            if isHighLast
+                endPrice := lastL.price
+                diff = math.abs(startPrice - endPrice)
+                if lastH.price > endPrice + diff * lowerThreshold or lastH.price < endPrice + diff * upperThreshold
+                    array.push(pivotsLCopy, lastL)
+                    continue
+                line.delete(lineLastHL)
+                line.delete(lineLastLH)
+                lineLastHL := line.new(prevPivot, lastL, color=color.red, width=1, style=line.style_dashed, xloc = xloc.bar_time)
+                lineLastLH := line.new(lastL, lastH, color=color.green, width=1, style=line.style_dashed, xloc = xloc.bar_time)
+                lineLast := lineLastLH
+            else
+                endPrice := lastH.price
+                diff = math.abs(startPrice - endPrice)
+                if lastL.price < endPrice - diff * lowerThreshold or lastL.price > endPrice - diff * upperThreshold
+                    array.push(pivotsHCopy, lastH)
+                    continue
+                line.delete(lineLastHL)
+                line.delete(lineLastLH)
+                lineLastLH := line.new(prevPivot, lastH, color=color.red, width=1, style=line.style_dashed, xloc = xloc.bar_time)
+                lineLastHL := line.new(lastH, lastL, color=color.green, width=1, style=line.style_dashed, xloc = xloc.bar_time)
+                lineLast := lineLastHL
+            break
+    diff = (isHighLast ? -1 : 1) * math.abs(startPrice - endPrice)
+    offset = isHighLast ? line.get_y1(lineLastLH) - line.get_y2(lineLastLH) : line.get_y1(lineLastHL) - line.get_y2(lineLastHL)
+    offset := (isHighLast ? -1 : 1) * math.abs(offset)
+	if barstate.islast and na(lineLast)
+		runtime.error("Not enough data to calculate Auto Fib Extension on the current symbol. Change the chart's timeframe to a lower one or select a smaller calculation depth using the indicator's `Depth` settings.")
+
+    [endPrice - offset, diff, lineLast]
+
+[endPrice, diff, lineLast] = update()
+
+_draw_line(price, col) =>
+    var id = line.new(time, price, time, price, color=col, width=1, extend=extending, xloc = xloc.bar_time)
+    if not na(lineLast)
+        line.set_xy1(id, line.get_x1(lineLast), price)
+        line.set_xy2(id, line.get_x2(lineLast), price)
+    id
+
+_draw_label(price, txt, txtColor) =>
+    if not na(price)
+        x = labelsPosition == "Left" ? line.get_x1(lineLast) : not extendRight ? line.get_x2(lineLast) : time
+        labelStyle = labelsPosition == "Left" ? label.style_label_right : label.style_label_left
+        align = labelsPosition == "Left" ? text.align_right : text.align_left
+        labelsAlignStrLeft = txt + '\n ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏ \n'
+        labelsAlignStrRight = '       ' + txt + '\n ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏ \n'
+        labelsAlignStr = labelsPosition == "Left" ? labelsAlignStrLeft : labelsAlignStrRight
+        var id = label.new(x=x, y=price, text=labelsAlignStr, textcolor=txtColor, style=labelStyle, textalign=align, color=#00000000, xloc = xloc.bar_time)
+        label.set_xy(id, x, price)
+        label.set_text(id, labelsAlignStr)
+        label.set_textcolor(id, txtColor)
+
+_wrap(txt) =>
+    "(" + str.tostring(txt, format.mintick) + ")"
+
+_label_txt(level, price) =>
+    if not na(price)
+        l = levelsFormat == "Values" ? str.tostring(level) : str.tostring(level * 100) + "%"
+        (levels ? l : "") + (prices ? _wrap(price) : "")
+
+_crossing_level(sr, r) =>
+    (r > sr and r < sr[1]) or (r < sr and r > sr[1])
+
+processLevel(show, value, colorL, lineIdOther) =>
+    float m = value
+    r = endPrice + ((reverse ? -1 : 1) * diff * m)
+    
+    // Call _crossing_level for consistency, regardless of range
+    crossLevel = _crossing_level(close, r)
+    
+    // Display only if the level is within the current price range
+    if show and r >= low * 0.5 and r <= high * 1.5  // Adjusted range to avoid cutting out important levels
+        lineId = _draw_line(r, colorL)
+        _draw_label(r, _label_txt(m, r), colorL)
+        
+        // Create alert if level is crossed
+        if crossLevel
+            alert("Autofib: " + syminfo.ticker + " crossing level " + str.tostring(value))
+        
+        // Fill between lines
+        if not na(lineIdOther)
+            linefill.new(lineId, lineIdOther, color = color.new(colorL, backgroundTransparency))
+        lineId
+    else
+        lineIdOther
+
+show_300 = input(true, "Display Level", inline = "Level9", display = display.data_window)
+value_300 = input.float(3.0, "", inline = "Level9", display = display.data_window)
+color_300 = input.color(color.rgb(255, 0, 0), "Color", inline = "Level9", display = display.data_window)
+
+show_261_8 = input(true, "Display Level%", inline = "Level8", display = display.data_window)
+value_261_8 = input.float(2.618, "", inline = "Level8", display = display.data_window)
+color_261_8 = input.color(color.rgb(255, 0, 0), "Color", inline = "Level8", display = display.data_window)
+
+show_200 = input(true, "Display Level%", inline = "Level7", display = display.data_window)
+value_200 = input.float(2.0, "", inline = "Level7", display = display.data_window)
+color_200 = input.color(color.rgb(255, 0, 0), "Color", inline = "Level7", display = display.data_window)
+
+show_161_8 = input(true, "Display Level", inline = "Level6", display = display.data_window)
+value_161_8 = input.float(1.618, "", inline = "Level6", display = display.data_window)
+color_161_8 = input.color(color.rgb(59, 153, 216), "Color", inline = "Level6", display = display.data_window)
+
+show_115 = input(true, "Display Level", inline = "Level5", display = display.data_window)
+value_115 = input.float(1.15, "", inline = "Level5", display = display.data_window)
+color_115 = input.color(color.rgb(59, 153, 216), "Color", inline = "Level5", display = display.data_window)
+
+show_100 = input(true, "Display Level", inline = "Level4", display = display.data_window)
+value_100 = input.float(1.0, "", inline = "Level4", display = display.data_window)
+color_100 = input.color(color.rgb(59, 153, 216), "Color", inline = "Level4", display = display.data_window)
+
+show_61_8 = input(true, "Display Level", inline = "Level3", display = display.data_window)
+value_61_8 = input.float(0.618, "", inline = "Level3", display = display.data_window)
+color_61_8 = input.color(color.rgb(186, 186, 24), "Color", inline = "Level3", display = display.data_window)
+
+show_neg_15 = input(true, "Display Level", inline = "Level2", display = display.data_window)
+value_neg_15 = input.float(-0.15, "", inline = "Level2", display = display.data_window)
+color_neg_15 = input.color(color.rgb(186, 186, 24), "Color", inline = "Level2", display = display.data_window)
+
+show_neg_38_2 = input(true, "Display Level", inline = "Level1", display = display.data_window)
+value_neg_38_2 = input.float(-0.382, " ", inline = "Level1", display = display.data_window)
+color_neg_38_2 = input.color(color.rgb(186, 186, 24), "Color", inline = "Level1", display = display.data_window)
+
+show_neg_61_8 = input(true, "Display Level", inline = "Level0", display = display.data_window)
+value_neg_61_8 = input.float(-0.618, "", inline = "Level0", display = display.data_window)
+color_neg_61_8 = input.color(color.rgb(186, 186, 24), "Color", inline = "Level0", display = display.data_window)
+
+show_neg_75 = input(true, "Display Level", inline = "Level-1", display = display.data_window)
+value_neg_75 = input.float(-0.75, "", inline = "Level-1", display = display.data_window)
+color_neg_75 = input.color(color.rgb(186, 186, 24), "Color", inline = "Level-1", display = display.data_window)
+
+show_neg_85 = input(true, "Display Level", inline = "Level-0", display = display.data_window)
+value_neg_85 = input.float(-0.85, "", inline = "Level-0", display = display.data_window)
+color_neg_85 = input.color(color.rgb(186, 186, 24), "Color", inline = "Level-0", display = display.data_window)
+
+
+
+if showFib
+    lineId11 = processLevel(show_neg_85, value_neg_85, color_neg_85, line(na))
+    lineId0 = processLevel(show_neg_75, value_neg_75, color_neg_75, lineId11)
+    lineId1 = processLevel(show_neg_61_8, value_neg_61_8, color_neg_61_8, lineId0)
+    lineId2 = processLevel(show_neg_38_2, value_neg_38_2, color_neg_38_2, lineId1)
+    lineId3 = processLevel(show_neg_15, value_neg_15, color_neg_15, lineId2)
+    lineId4 = processLevel(show_61_8, value_61_8, color_61_8, lineId3)
+    lineId5 = processLevel(show_100, value_100, color_100, lineId4)
+    lineId6 = processLevel(show_115, value_115, color_115, lineId5)
+    lineId7 = processLevel(show_161_8, value_161_8, color_161_8, lineId6)
+    lineId8 = processLevel(show_200, value_200, color_200, lineId7)
+    lineId9 = processLevel(show_261_8, value_261_8, color_261_8, lineId8)
+    lineId10 = processLevel(show_300, value_300, color_300, lineId9)
+   
+//// ===================
+// EMA Settings
+// ===================
+group_ema = "EMA and Smiley Settings"
+
+// EMA Definitions
+ema_def1 = input.int(20, title="EMA 1 Length", minval=1, group=group_ema)
+ema_def2 = input.int(52, title="EMA 2 Length", minval=1, group=group_ema)
+ema_def3 = input.int(90, title="EMA 3 Length", minval=1, group=group_ema)
+ema_def4 = input.int(160, title="EMA 4 Length", minval=1, group=group_ema)
+ema_def5 = input.int(210, title="EMA 5 Length", minval=1, group=group_ema)
+ema_def6 = input.int(265, title="EMA 6 Length", minval=1, group=group_ema)
+
+show_smiley = input.bool(true, title="Show Smiley", group=group_ema)
+
+// EMA Calculations
+ema_line1 = ta.ema(close, ema_def1)
+ema_line2 = ta.ema(close, ema_def2)
+ema_line3 = ta.ema(close, ema_def3)
+ema_line4 = ta.ema(close, ema_def4)
+ema_line5 = ta.ema(close, ema_def5)
+ema_line6 = ta.ema(close, ema_def6)
+
+// Plot each EMA line
+plot(ema_line1, color=color.purple, linewidth=2, title="EMA 1")
+plot(ema_line2, color=color.white, linewidth=2, title="EMA 2")
+plot(ema_line3, color=color.green, linewidth=2, title="EMA 3")
+plot(ema_line4, color=color.yellow, linewidth=2, title="EMA 4")
+plot(ema_line5, color=color.blue, linewidth=2, title="EMA 5")
+plot(ema_line6, color=color.red, linewidth=2, title="EMA 6")
+
+// Initialize labels for each EMA length (at the last bar)
+if (barstate.islast)
+    // Delete previous labels if they exist
+    var label ema_label1 = na
+    var label ema_label2 = na
+    var label ema_label3 = na
+    var label ema_label4 = na
+    var label ema_label5 = na
+    var label ema_label6 = na
+    
+    // // Delete previous labels
+    // if (not na(ema_label1)) label.delete(ema_label1)
+    // if (not na(ema_label2)) label.delete(ema_label2)
+    // if (not na(ema_label3)) label.delete(ema_label3)
+    // if (not na(ema_label4)) label.delete(ema_label4)
+    // if (not na(ema_label5)) label.delete(ema_label5)
+    // if (not na(ema_label6)) label.delete(ema_label6)
+
+    // Create new labels at the edge of each EMA line
+    ema_label1 := label.new(bar_index +10, ema_line1, text="" + str.tostring(ema_def1), style=label.style_label_down, color=color.purple, textcolor=color.white, size=size.normal)
+    ema_label2 := label.new(bar_index +15, ema_line2, text="" + str.tostring(ema_def2), style=label.style_label_down, color=color.white, textcolor=color.black, size=size.normal)
+    ema_label3 := label.new(bar_index +10, ema_line3, text="" + str.tostring(ema_def3), style=label.style_label_down, color=color.green, textcolor=color.white, size=size.normal)
+    ema_label4 := label.new(bar_index +15, ema_line4, text="" + str.tostring(ema_def4), style=label.style_label_down, color=color.yellow, textcolor=color.black, size=size.normal)
+    ema_label5 := label.new(bar_index +10, ema_line5, text="" + str.tostring(ema_def5), style=label.style_label_down, color=color.blue, textcolor=color.white, size=size.normal)
+    ema_label6 := label.new(bar_index +15, ema_line6, text="" + str.tostring(ema_def6), style=label.style_label_down, color=color.red, textcolor=color.white, size=size.normal)
+
+
+
+
+
+
